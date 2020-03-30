@@ -16,11 +16,14 @@ if (typeof window.Mozilla === 'undefined') {
         'https://accounts.firefox.com/',
         'https://monitor.firefox.com/',
         'https://getpocket.com/',
-        'https://latest.dev.lcip.org/'
+        'https://latest.dev.lcip.org/',
+        'https://accounts.firefox.com.cn/'
     ];
 
+    var buttons;
+
     FxaProductButton.isSupported = function() {
-        return 'fetch' in window;
+        return 'Promise' in window && 'fetch' in window;
     };
 
     /**
@@ -33,21 +36,7 @@ if (typeof window.Mozilla === 'undefined') {
         return matches && matches[0];
     };
 
-    FxaProductButton.init = function() {
-        var buttons;
-
-        if (!FxaProductButton.isSupported()) {
-            return false;
-        }
-
-        // Collect all Fxa product buttons
-        buttons = document.getElementsByClassName('js-fxa-product-button');
-
-        // Exit if no valid button in DOM
-        if (buttons.length === 0) {
-            return;
-        }
-
+    FxaProductButton.fetchTokens = function() {
         var buttonURL = buttons[0].getAttribute('href');
 
         // strip url to everything after `?`
@@ -97,12 +86,58 @@ if (typeof window.Mozilla === 'undefined') {
                 var hostName = FxaProductButton.getHostName(buttons[i].href);
                 // check if link is in the FxA referral whitelist.
                 if (hostName && whitelist.indexOf(hostName) !== -1) {
+                    console.log(buttons[i].href += flowParams);
                     buttons[i].href += flowParams;
                 }
             }
         }).catch(function() {
             // silently fail: deviceId, flowBeginTime, flowId are not added to url.
         });
+    };
+
+    FxaProductButton.init = function() {
+        var metrics;
+        var dist;
+
+        if (!FxaProductButton.isSupported()) {
+            return false;
+        }
+
+        // Collect all Fxa product buttons
+        buttons = document.getElementsByClassName('js-fxa-product-button');
+
+        // Exit if no valid button in DOM
+        if (buttons.length === 0) {
+            return;
+        }
+
+        dist = new window.Promise(function(resolve) {
+            Mozilla.Client.getFirefoxDetails(function(data) {
+                // Only switch to China re-pack URL if UITour call is successful
+                // (marked by data.accurate being true)
+                if (data.accurate && data.distribution && data.distribution.toLowerCase() === 'mozillaonline') {
+                    for (var i = 0; i < buttons.length; i++) {
+                        var mozillaonlineAction = buttons[i].getAttribute('data-mozillaonline-action');
+                        var mozillaonlineLink = buttons[i].getAttribute('data-mozillaonline-link');
+
+                        if (mozillaonlineAction && mozillaonlineLink) {
+                            buttons[i].href = mozillaonlineLink;
+                            buttons[i].setAttribute('data-action', mozillaonlineAction);
+                        }
+                    }
+                }
+                // Add metrics params only once the distribution has been set.
+                metrics = new window.Promise(function(resolve) {
+                    FxaProductButton.fetchTokens().then(function() {
+                        resolve();
+                    });
+                });
+
+                resolve();
+            });
+        });
+
+        return window.Promise.all([dist, metrics]);
     };
 
     window.Mozilla.FxaProductButton = FxaProductButton;
