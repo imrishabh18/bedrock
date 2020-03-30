@@ -69,7 +69,5 @@
 {% block js %}{% endblock  %}
 
 {% block experiments %}
-  {% if switch('installer-help-experiment', ['en-US']) %}
-    {{ js_bundle('installer_help_experiment') }}
-  {% endif %}
+  {{ js_bundle('installer_help_experiment') }}
 {% endblock %}
